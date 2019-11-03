@@ -1,21 +1,23 @@
 
+comment_pattern = "^(\/\/).*"
+embedded_comment_pattern = "(\/\/).*"
+
+label_function_name = "((?![0-9])[\w._:]*)"
+
 c_arithmetic_pattern = "(add|sub|neg|eq|gt|lt|and|or|not)"
 mem_seg_pattern = "(local|argument|this|that|constant|static|temp|pointer)"
 index_pattern = "(\d+)"
-c_push_pattern = "^(push)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern
-c_pop_pattern = "^(pop)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern
+c_push_pattern = "^(push)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern + "{1}\s*(" + embedded_comment_pattern + ")*"
+c_pop_pattern = "^(pop)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern + "{1}\s*(" + embedded_comment_pattern + ")*"
 
-c_label_pattern = "^(label)\s{1}" + label_function_name
-c_goto_pattern = "^(goto)\s{1}" + label_function_name
-c_if_pattern = "^(if-goto)\s{1}" + label_function_name #if-goto
-c_function_pattern = "^(function)\s{1}" + label_function_name + "\s{1}(\d+)"
-c_return_pattern = "^(return)"
-c_call_pattern = "^(call)\s{1}" + label_function_name + "\s{1}(\d+)" #should we keep track of
+c_label_pattern = "^(label)\s{1}" + label_function_name + "{1}\s*(" + embedded_comment_pattern + ")*"
+c_goto_pattern = "^(goto)\s{1}" + label_function_name + "{1}\s*(" + embedded_comment_pattern + ")*"
+c_if_pattern = "^(if-goto)\s{1}" + label_function_name  + "{1}\s*(" + embedded_comment_pattern + ")*" #if-goto
+c_function_pattern = "^(function)\s{1}" + label_function_name + "\s{1}(\d+){1}\s*(" + embedded_comment_pattern + ")*"
+c_return_pattern = "^(return)" + "{1}\s*(" + embedded_comment_pattern + ")*"
+c_call_pattern = "^(call)\s{1}" + label_function_name + "\s{1}(\d+){1}\s*(" + embedded_comment_pattern + ")*" #should we keep track of
 #the functions in the current scope
                                 #so that we know what are valid calls?
-
-label_function_name = "((?![0-9])[\w._:]*)"
-comment_pattern = "^(\/\/).*"
 
 """
 Functions that initialize the values for the "static" keys in popMemSeg and pushMemSeg
@@ -121,11 +123,75 @@ pushMemSeg = {
 
 }
 
-flowControlTable = {
 """
-For our implementation, @* will be the placeholder for the label name
+Variables and functions for function command
 """
 
-    "goto" : "\n@*\n0;J\n"
-    "if-goto" : d_pop + "\n@*\nD;JNE\n"
+saveKandZeroR14 = "\n@_\nD=A\n@R15\nM=D\n@R14\nM=0\n"
+
+"""
+Variables and functions for call command
+"""
+def saveCallerPointer(mem_pointer):
+    """
+    <> is the placeholder for the pointer to the Memory Segment
+    """
+    s = "\n@<>\nD=M\n".replace("<>", mem_pointer)
+    s += d_push
+    return s
+
+push_return_address = "\n@*\nD=A\n" + d_push
+
+reposition_ARG = "\n@_\nD=A\n@5\nD=D-A\n@SP\nD=M-D\n@ARG\nM=D\n"
+
+reposition_LCL = "\n@SP\nD=M\n@LCL\nM=D"
+
+goto_func = d_pop + "\n@~\nD;J\n" #if-goto
+
+place_return_label = "\n(*)\n"
+
+"""
+Variables and functions for return command
+"""
+get_endframe = "\n@LCL\nD=M\n@R15\nM=D\n"
+
+get_return_address = "\n@5\nD=A\n@R15\nD=M-D\n@R14\nM=D\n"
+
+reposition_return_val = d_pop + "\n@ARG\nM=D\n"
+
+reposition_caller_SP = "\n@ARG\nD=M+1\n@SP\nM=D"
+
+restore_caller_THAT = "\n@R15\nD=M-1\n@THAT\nM=D\n"
+
+restore_caller_THIS = "\n@2\nD=A\n@R15\nD=M-1\n@THIS\nM=D\n"
+
+restore_caller_ARG = "\n@3\nD=A\n@R15\nD=M-1\n@ARG\nM=D\n"
+
+restore_caller_LCL = "\n@4\nD=A\n@R15\nD=M-1\n@LCL\nM=D\n"
+
+"""
+def restoreCallerPointer(mem_pointer):
+"""
+
+
+goto_return_address = "\n@R14\nA=M\nD;J\n"
+
+"""
+For our implementation, @* will be the placeholder for the label name, @~ will be the
+placeholder function names, and @_ will be the placeholder for numbers
+
+Those will be taken care of in the code_writer
+"""
+flowControlTable = {
+    #label is taken care of in code_writer
+    "goto" : "\n@*\n0;J\n",
+    "if-goto" : d_pop + "\n@*\nD;JNE\n",
+
+    #function: * in function will be replaced with "filename.function_nameLOOP"
+    #Need to add unique identifier to the loop label if a function has more than one loop
+    "function" : saveKandZeroR14 + "\n(*)\n@R14\nA=M\nD=0\n" + d_push + "\n@R14\nM=M+1\n@R15\nM=M-1\n@*\nD;JNE\n",
+    #call: Appending the return label - (return_label) - is done in code_writer
+    "call" : push_return_address + saveCallerPointer("LCL") + saveCallerPointer("ARG") + saveCallerPointer("THIS") + saveCallerPointer("THAT") + reposition_ARG + reposition_LCL + goto_func + place_return_label,
+    "return" : get_endframe + get_return_address + reposition_return_val + reposition_caller_SP + restore_caller_THAT + restore_caller_THIS + restore_caller_ARG + restore_caller_LCL + goto_return_address
+
 }
