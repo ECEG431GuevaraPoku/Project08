@@ -8,6 +8,12 @@ COMMENT_OR_EMPTY = "COMMENT"
 C_ARITHMETIC = "C_ARITHMETIC"
 C_PUSH = "C_PUSH"
 C_POP = "C_POP"
+C_LABEL = "C_LABEL"
+C_GOTO = "C_GOTO"
+C_IF = "C_IF"
+C_FUNCTION = "C_FUNCTION"
+C_CALL = "C_CALL"
+C_RETURN = "C_RETURN"
 
 
 class Parser:
@@ -64,6 +70,8 @@ class Parser:
 					coder = CodeWriter(self.out_file_str)
 
 					if command_type != COMMENT_OR_EMPTY:
+						commented_command = "//" + command + "\n"
+						coder.write(commented_command)
 						if command_type == C_ARITHMETIC:
                             #assembly_encoding = arithmeticSymbolTable[command]
 							coder.writeArithmetic(command)
@@ -74,24 +82,46 @@ class Parser:
 							coder.writePushPop(command, mem_seg, int(index), command_type)
 
 						elif command_type == C_LABEL:
-							pass
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeLabel(label_name)
+
 						elif command_type == C_GOTO:
-							pass
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeGoto(label_name)
+
 						elif command_type == C_IF:
-							pass
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeIf(label_name)
+
 						elif command_type == C_FUNCTION:
-							pass
-						elif command_type == C_RETURN:
-							pass
+							command_array = command.split()
+							function_name = command_array[1]
+							nVars = command_array[2]
+							coder.setFunctionName(function_name)
+							coder.writeFunction(nVars, line_number)
+
 						elif command_type == C_CALL:
-							pass
+							command_array = command.split()
+							function_name = command_array[1]
+							coder.writeCall(function_name, nArgs, line_number)
+
+						elif command_type == C_RETURN:
+							coder.writeReturn()
+
 						else:
-							#Raise Syntax
+							#Raise Syntax Error
 							pass
 						line_number=line_number+1
 
+
+				"""
 				finally:
 					coder.close()
+				"""
+			coder.close()
 			with open(self.out_file_str, 'r') as in_file, open(self.output, 'a+') as out_file:
 				for line in in_file:
 					if line.strip():
@@ -109,7 +139,20 @@ class Parser:
 			return C_PUSH
 		elif re.fullmatch(c_pop_pattern, command) != None:
 			return C_POP
+		elif re.fullmatch(c_label_pattern, command) != None:
+			return C_LABEL
+		elif re.fullmatch(c_goto_pattern, command) != None:
+			return C_GOTO
+		elif re.fullmatch(c_if_pattern, command) != None:
+			return C_IF
+		elif re.fullmatch(c_function_pattern, command) != None:
+			return C_FUNCTION
+		elif re.fullmatch(c_call_pattern, command) != None:
+			return C_CALL
+		elif re.fullmatch(c_return_pattern, command) != None:
+			return C_RETURN
 		else:
+			print("SYNTAX ERROR WITH COMMAND: " + command + "\n")
 			raise VMSyntaxError
 
 	def getMemorySegment(self, command):
