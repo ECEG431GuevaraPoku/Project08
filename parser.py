@@ -1,197 +1,170 @@
+import re
+import os
+from tables_patterns import *
+from custom_errors import *
+from code_writer import *
 
-comment_pattern = "^(\/\/).*"
-embedded_comment_pattern = "(\/\/).*"
-
-label_function_name = "((?![0-9])[\w._:]*)"
-
-c_arithmetic_pattern = "(add|sub|neg|eq|gt|lt|and|or|not)"
-mem_seg_pattern = "(local|argument|this|that|constant|static|temp|pointer)"
-index_pattern = "(\d+)"
-c_push_pattern = "^(push)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern + "{1}\s*(" + embedded_comment_pattern + ")*"
-c_pop_pattern = "^(pop)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern + "{1}\s*(" + embedded_comment_pattern + ")*"
-
-c_label_pattern = "^(label)\s{1}" + label_function_name + "{1}\s*(" + embedded_comment_pattern + ")*"
-c_goto_pattern = "^(goto)\s{1}" + label_function_name + "{1}\s*(" + embedded_comment_pattern + ")*"
-c_if_pattern = "^(if-goto)\s{1}" + label_function_name  + "{1}\s*(" + embedded_comment_pattern + ")*" #if-goto
-c_function_pattern = "^(function)\s{1}" + label_function_name + "\s{1}(\d+){1}\s*(" + embedded_comment_pattern + ")*"
-c_return_pattern = "^(return)" + "{1}\s*(" + embedded_comment_pattern + ")*"
-c_call_pattern = "^(call)\s{1}" + label_function_name + "\s{1}(\d+){1}\s*(" + embedded_comment_pattern + ")*" #should we keep track of
-#the functions in the current scope
-                                #so that we know what are valid calls?
-
-"""
-Functions that initialize the values for the "static" keys in popMemSeg and pushMemSeg
-dictionaries.
-They are called with the Parser model
-"""
-def pushStatic(filename):
-    dirArray = filename.split("/")
-    var_name = dirArray[-1] +"._"
-    asm_code = "\n@" + var_name + "\nD=M\n" + d_push + "\n"
-    return asm_code
-
-def popStatic(filename):
-    dirArray = filename.split("/")
-    var_name = dirArray[-1] +"._"
-    asm_code = "\n@" + var_name + "\nD=A\n@R15\nM=D\n" + d_pop + "\n@R15\nA=M\nM=D\n"
-    return asm_code
-
-"""
-Reusuable assembly instructions for local, argument, this, that
-"""
-def getMemSegPush(mem_pointer):
-    """
-    <> is the placeholder for the pointer to the Memory Segment
-    """
-    s = "\n@_\nD=A\n@<>\nA=M+D\nD=M\n".replace("<>", mem_pointer)
-    return s
-
-def getMemSegPop(mem_pointer):
-    """
-    <> is the placeholder for the pointer to the Memory Segment
-    """
-    s = "\n@_\nD=A\n@<>\nA=M+D\nD=A\n".replace("<>", mem_pointer)
-    return s
-
-store_pointer = "\n@R15\nM=D\n@SP\nD=M\n"
-pop_to_memseg = "\n@R15\nA=M\nM=D\n"
-
-"""
-Generic strings for pushing and popping to D register as intermediary for
-pushing and popping with mem segments
-"""
-d_push = "\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
-d_pop = "\n@SP\nM=M-1\n@SP\nA=M\nD=M\n"
-
-"""
-Symbol table for arithmetic and logical operations.
-Arithmetic and logical operations all go through the stack for operands.
-"""
-arithmeticSymbolTable = {
-
-    'add' : "\n" + d_pop + "\n@SP\nM=M-1\nA=M\nD=M+D\n" + d_push,
-
-    "sub" : "\n" + d_pop + "\n@SP\nM=M-1\nA=M\nD=M-D\n" + d_push,
-
-    "neg" : "\n" + d_pop + "\nD=-D\n" + d_push + "\n",
-
-    #You could probably implement eq with just subtraction?
-    #if D==0, D-0==0
-    #if D!=0, D-0==D
-    "eq" : "\n@R15\nM=D\nD=-1\n@R15\nD=D&M\n@EQEQ\nD;JEQ\n@PUSH2STACKEQ\nD;J\n(EQEQ)\nD=-1\n@PUSH2STACKEQ\nD;J\n(PUSH2STACKEQ)\n" + d_push + "\n",
-
-    "gt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@GTGT\nD;JGT\n@PUSH2STACKGT\nD=0;J\n(GTGT)\nD=-1\n@PUSH2STACKGT\nD;J\n(PUSH2STACKGT)\n" + d_push + "\n",
-
-    "lt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@LTLT\nD;JLT\n@PUSH2STACKLT\nD=0;J\n(LTLT)\nD=-1\n@PUSH2STACKLT\nD;J\n(PUSH2STACKLT)\n" + d_push + "\n",
-
-    "and" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M&D\nD=M\n@SP\nM=M+1\n",
-
-    "or" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M|D\nD=M\n@SP\nM=M+1\n",
-
-    "not" : "\n" + d_pop + "\nD=!D\n" + d_push + "\n"
-}
-
-'''
-For our implementation, @_ will be the placeholder for the first operand. We'll then use the string replace function to input the
-actual values.
-'''
-popMemSeg = {
-    #The first 4 will have the same generic format
-    "local" : getMemSegPop("LCL") + store_pointer + d_pop + pop_to_memseg,
-    "argument" : getMemSegPop("ARG") + store_pointer + d_pop + pop_to_memseg,
-    "this" : getMemSegPop("THIS") + store_pointer + d_pop + pop_to_memseg,
-    "that" : getMemSegPop("THAT") + store_pointer + d_pop + pop_to_memseg,
-
-    "constant" : "\n@_\nD=A\n" + d_pop,
-    "static" : "",  #This gets initialized by the Parser model
-    "temp" : d_pop + "\n@_\nM=D\n",
-    "pointer" : d_pop + "\n@_\nM=D\n"
-
-}
-
-pushMemSeg = {
-    #The first 4 will have the same generic format
-    "local" : getMemSegPush("LCL") + "\n" + d_push + "\n",
-    "argument" : getMemSegPush("ARG") + "\n" + d_push + "\n",
-    "this" : getMemSegPush("THIS") + "\n" + d_push + "\n",
-    "that" : getMemSegPush("THAT") + "\n" + d_push + "\n",
-
-    "constant" : "\n@_\nD=A\n" + d_push + "\n",
-    "static" : "",  #This gets initialized by the Parser model
-    "temp" : "\n@_\nD=M\n" + d_push + "\n",
-    "pointer" : "\n@_\nD=M\n" + d_push + "\n"
-
-}
-
-"""
-Variables and functions for function command
-"""
-
-saveKandZeroR14 = "\n@_\nD=A\n@R15\nM=D\n@R14\nM=0\n"
-
-"""
-Variables and functions for call command
-"""
-def saveCallerPointer(mem_pointer):
-    """
-    <> is the placeholder for the pointer to the Memory Segment
-    """
-    s = "\n@<>\nD=M\n".replace("<>", mem_pointer)
-    s += d_push
-    return s
-
-push_return_address = "\n@*\nD=A\n" + d_push
-
-reposition_ARG = "\n@_\nD=A\n@5\nD=D-A\n@SP\nD=M-D\n@ARG\nM=D\n"
-
-reposition_LCL = "\n@SP\nD=M\n@LCL\nM=D"
-
-goto_func = d_pop + "\n@~\nD;J\n" #if-goto
-
-place_return_label = "\n(*)\n"
-
-"""
-Variables and functions for return command
-"""
-get_endframe = "\n@LCL\nD=M\n@R15\nM=D\n"
-
-get_return_address = "\n@5\nD=A\n@R15\nD=M-D\n@R14\nM=D\n"
-
-reposition_return_val = d_pop + "\n@ARG\nM=D\n"
-
-reposition_caller_SP = "\n@ARG\nD=M+1\n@SP\nM=D"
-
-restore_caller_THAT = "\n@R15\nD=M-1\n@THAT\nM=D\n"
-
-restore_caller_THIS = "\n@2\nD=A\n@R15\nD=M-1\n@THIS\nM=D\n"
-
-restore_caller_ARG = "\n@3\nD=A\n@R15\nD=M-1\n@ARG\nM=D\n"
-
-restore_caller_LCL = "\n@4\nD=A\n@R15\nD=M-1\n@LCL\nM=D\n"
-
-"""
-def restoreCallerPointer(mem_pointer):
-"""
+COMMENT_OR_EMPTY = "COMMENT"
+C_ARITHMETIC = "C_ARITHMETIC"
+C_PUSH = "C_PUSH"
+C_POP = "C_POP"
+C_LABEL = "C_LABEL"
+C_GOTO = "C_GOTO"
+C_IF = "C_IF"
+C_FUNCTION = "C_FUNCTION"
+C_CALL = "C_CALL"
+C_RETURN = "C_RETURN"
 
 
-goto_return_address = "\n@R14\nA=M\nD;J\n"
+class Parser:
+	hasMoreCommands = False
 
-"""
-For our implementation, @* will be the placeholder for the label name, @~ will be the
-placeholder function names, and @_ will be the placeholder for numbers
+	def __init__(self, file_str, out_file_str):
+		self.file_str = file_str
 
-Those will be taken care of in the code_writer
-"""
-flowControlTable = {
-    #label is taken care of in code_writer
-    "goto" : "\n@*\n0;J\n",
-    "if-goto" : d_pop + "\n@*\nD;JNE\n",
+		fileArray = self.file_str.split('.', 1)
+		self.filename = fileArray[0]
+		self.fileType = fileArray[1]
+		"""
+		*Moved to main file*
+		try:
+			assert self.fileType == "asm"
+		except AssertionError as e:
+			#e.args+=("FileTypeError: Expected .asm", self.fileType)
+			errorInfo = "\nFileTypeError: Expected .asm | Received ." + self.fileType
+			#e.args[0] += errorInfo
+			print(errorInfo)
+			raise
 
-    #function: * in function will be replaced with "filename.function_nameLOOP"
-    #Need to add unique identifier to the loop label if a function has more than one loop
-    "function" : saveKandZeroR14 + "\n(*)\n@R14\nA=M\nD=0\n" + d_push + "\n@R14\nM=M+1\n@R15\nM=M-1\n@*\nD;JNE\n",
-    #call: Appending the return label - (return_label) - is done in code_writer
-    "call" : push_return_address + saveCallerPointer("LCL") + saveCallerPointer("ARG") + saveCallerPointer("THIS") + saveCallerPointer("THAT") + reposition_ARG + reposition_LCL + goto_func + place_return_label,
-    "return" : get_endframe + get_return_address + reposition_return_val + reposition_caller_SP + restore_caller_THAT + restore_caller_THIS + restore_caller_ARG + restore_caller_LCL + goto_return_address
+		self.out_file_str = self.filename + ".hack"
+		"""
+		self.out_file_str = out_file_str + ".txt"
+		self.output = out_file_str + ".asm"
+		pushMemSeg["static"] = pushStatic(self.filename)
+		popMemSeg["static"] = popStatic(self.filename)
+		self.variable_address = 16
 
-}
+	def advance(self):
+		"""
+		Loop through the assembly file and convert each instruction to machine code
+		"""
+
+		with open(self.file_str, 'r') as in_file:
+
+			line_number = 1
+			syntax_error_line = 0
+			for line in in_file:
+				syntax_error_line+=1
+				command = line.strip()	#remove white space
+				try:
+					command_type = self.commandType(command)
+				except VMSyntaxError as e:
+					with open(self.out_file_str, 'a+') as out_file:
+						#Clear the contents of the hack file from previous assembles
+						out_file.truncate(0)
+					errorInfo = "\VM Syntax Error at line " + str(line_number)
+					print(errorInfo)
+					raise
+				else:
+					assembly_encoding = ""
+					coder = CodeWriter(self.out_file_str)
+
+					if command_type != COMMENT_OR_EMPTY:
+						commented_command = "//" + command + "\n"
+						coder.write(commented_command)
+						if command_type == C_ARITHMETIC:
+                            #assembly_encoding = arithmeticSymbolTable[command]
+							coder.writeArithmetic(command)
+						elif command_type == C_POP or command_type == C_PUSH:
+
+							mem_seg = self.getMemorySegment(command)
+							index = self.getMemoryIndex(command)
+							coder.writePushPop(command, mem_seg, int(index), command_type)
+
+						elif command_type == C_LABEL:
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeLabel(label_name)
+
+						elif command_type == C_GOTO:
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeGoto(label_name)
+
+						elif command_type == C_IF:
+							command_array = command.split()
+							label_name = command_array[1]
+							coder.writeIf(label_name)
+
+						elif command_type == C_FUNCTION:
+							command_array = command.split()
+							function_name = command_array[1]
+							nVars = command_array[2]
+							coder.setFunctionName(function_name)
+							coder.writeFunction(nVars, line_number)
+
+						elif command_type == C_CALL:
+							command_array = command.split()
+							function_name = command_array[1]
+							coder.writeCall(function_name, nArgs, line_number)
+
+						elif command_type == C_RETURN:
+							coder.writeReturn()
+
+						else:
+							#Raise Syntax Error
+							pass
+						line_number=line_number+1
+
+
+				"""
+				finally:
+					coder.close()
+				"""
+			coder.close()
+			with open(self.out_file_str, 'r') as in_file, open(self.output, 'a+') as out_file:
+				for line in in_file:
+					if line.strip():
+						out_file.write(line)
+			os.remove(self.out_file_str)
+
+	def commandType(self, command):
+		if re.fullmatch(comment_pattern, command) != None or len(command)==0:
+			return COMMENT_OR_EMPTY
+
+		elif re.fullmatch(c_arithmetic_pattern, command) != None:
+			return C_ARITHMETIC
+
+		elif re.fullmatch(c_push_pattern, command) != None:
+			return C_PUSH
+		elif re.fullmatch(c_pop_pattern, command) != None:
+			return C_POP
+		elif re.fullmatch(c_label_pattern, command) != None:
+			return C_LABEL
+		elif re.fullmatch(c_goto_pattern, command) != None:
+			return C_GOTO
+		elif re.fullmatch(c_if_pattern, command) != None:
+			return C_IF
+		elif re.fullmatch(c_function_pattern, command) != None:
+			return C_FUNCTION
+		elif re.fullmatch(c_call_pattern, command) != None:
+			return C_CALL
+		elif re.fullmatch(c_return_pattern, command) != None:
+			return C_RETURN
+		else:
+			print("SYNTAX ERROR WITH COMMAND: " + command + "\n")
+			raise VMSyntaxError
+
+	def getMemorySegment(self, command):
+		"""
+			We'll generalize this to the arg1() function for project 8
+		"""
+		mem_seg = re.search(mem_seg_pattern, command).group(0)
+		return mem_seg
+
+	def getMemoryIndex(self, command):
+		"""
+			We'll generalize this to the arg2() function for project 8
+		"""
+		indexStr =  re.search(index_pattern, command).group(0)
+		return indexStr
