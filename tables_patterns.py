@@ -78,11 +78,11 @@ arithmeticSymbolTable = {
     #You could probably implement eq with just subtraction?
     #if D==0, D-0==0
     #if D!=0, D-0==D
-    "eq" : "\n@R15\nM=D\nD=-1\n@R15\nD=D&M\n@EQEQ\nD;JEQ\n@PUSH2STACKEQ\nD;J\n(EQEQ)\nD=-1\n@PUSH2STACKEQ\nD;J\n(PUSH2STACKEQ)\n" + d_push + "\n",
+    "eq" : "\n@R15\nM=D\nD=-1\n@R15\nD=D&M\n@~\nD;JEQ\n@*\nD;JMP\n(~)\nD=-1\n@*\nD;J\n(*)\n" + d_push + "\n",
 
-    "gt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@GTGT\nD;JGT\n@PUSH2STACKGT\nD=0;J\n(GTGT)\nD=-1\n@PUSH2STACKGT\nD;J\n(PUSH2STACKGT)\n" + d_push + "\n",
+    "gt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JGT\n@*\nD=0;J\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
 
-    "lt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@LTLT\nD;JLT\n@PUSH2STACKLT\nD=0;J\n(LTLT)\nD=-1\n@PUSH2STACKLT\nD;J\n(PUSH2STACKLT)\n" + d_push + "\n",
+    "lt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JLT\n@*\nD=0;J\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
 
     "and" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M&D\nD=M\n@SP\nM=M+1\n",
 
@@ -146,7 +146,7 @@ reposition_ARG = "\n@_\nD=A\n@5\nD=D-A\n@SP\nD=M-D\n@ARG\nM=D\n"
 
 reposition_LCL = "\n@SP\nD=M\n@LCL\nM=D"
 
-goto_func = d_pop + "\n@~\nD;J\n" #if-goto
+goto_func = d_pop + "\n@~\nD;JMP\n" #if-goto
 
 place_return_label = "\n(*)\n"
 
@@ -184,7 +184,7 @@ Those will be taken care of in the code_writer
 """
 flowControlTable = {
     #label is taken care of in code_writer
-    "goto" : "\n@*\n0;J\n",
+    "goto" : "\n@*\n0;JMP\n",
     "if-goto" : d_pop + "\n@*\nD;JNE\n",
 
     #function: * in function will be replaced with "filename.function_nameLOOP"
