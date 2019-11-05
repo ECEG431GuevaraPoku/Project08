@@ -13,23 +13,43 @@ def fileIsVM(file_str):
 def main():
 
     for arg_file in sys.argv[1:]:
+        path = ""
         if os.path.isdir(arg_file+"/"):
             #print("WE GOT A DIRECTORY\n")
             #out_file = arg_file.strip(".vm") + ".asm"
             out_file = arg_file.strip(".vm")
-            if os.path.exists(out_file):
+            #out_file = out_file + "/" + out_file
+            if os.path.exists(out_file + ".asm"):
                 #might stop removing it completely
                 os.remove(out_file)
+            dir_list =  os.listdir(arg_file+"/")
+            print(dir_list)
+            """
             with os.scandir(arg_file+"/") as entries:
                 for entry in entries:
-                    if fileIsVM(entry):
-                        parser = Parser(entry, out_file)
+                    if fileIsVM(entry.name):
+                        #file_name =
+                        parser = Parser(entry.path, out_file)
                         parser.advance()
+            """
+            if "Sys.vm" in dir_list:
+                path = arg_file + "/Sys.vm"
+                abspath = os.path.abspath(path)
+                parser = Parser(abspath, out_file)
+                parser.advance()
+                dir_list.remove("Sys.vm")
+            for entry in dir_list:
+                if fileIsVM(entry):
+                    #file_name =
+                    path = arg_file + "/" + entry
+                    abspath = os.path.abspath(path)
+                    parser = Parser(abspath, out_file)
+                    parser.advance()
         elif os.path.exists(arg_file) and fileIsVM(arg_file):
             #print("WE GOT A FILE\n")
             #out_file = arg_file.strip(".vm") + ".asm"
             out_file = arg_file.strip(".vm")
-            if os.path.exists(out_file):
+            if os.path.exists(out_file + ".asm"):
                 os.remove(out_file)
             parser = Parser(arg_file, out_file)
             parser.advance()
