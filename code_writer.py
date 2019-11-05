@@ -5,6 +5,9 @@ class CodeWriter:
     def __init__(self, filename):
         self.fileString = filename.split(".")[0].split("/")[-1]
         self.out_file = open(filename, 'a+')
+        #self.function_name = self.fileString + default_function
+
+    def setDefaultFunctionName(self):
         self.function_name = self.fileString + ".default"
 
     def setFunctionName(self, function_name):
