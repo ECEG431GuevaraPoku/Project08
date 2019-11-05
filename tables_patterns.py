@@ -4,7 +4,8 @@ embedded_comment_pattern = "(\/\/).*"
 
 label_function_name = "((?![0-9])[\w._:]*)"
 
-c_arithmetic_pattern = "(add|sub|neg|eq|gt|lt|and|or|not)"
+c_arithmetic = "(add|sub|neg|eq|gt|lt|and|or|not)"
+c_arithmetic_pattern = c_arithmetic + "{1}\s*(" + embedded_comment_pattern + ")*"
 mem_seg_pattern = "(local|argument|this|that|constant|static|temp|pointer)"
 index_pattern = "(\d+)"
 c_push_pattern = "^(push)\s{1}" + mem_seg_pattern + "{1}\s{1}" + index_pattern + "{1}\s*(" + embedded_comment_pattern + ")*"
@@ -78,11 +79,11 @@ arithmeticSymbolTable = {
     #You could probably implement eq with just subtraction?
     #if D==0, D-0==0
     #if D!=0, D-0==D
-    "eq" : "\n@R15\nM=D\nD=-1\n@R15\nD=D&M\n@~\nD;JEQ\n@*\nD;JMP\n(~)\nD=-1\n@*\nD;J\n(*)\n" + d_push + "\n",
+    "eq" : "\n@R15\nM=D\nD=-1\n@R15\nD=D&M\n@~\nD;JEQ\n@*\nD;JMP\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
 
-    "gt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JGT\n@*\nD=0;J\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
+    "gt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JGT\n@*\nD=0;JMP\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
 
-    "lt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JLT\n@*\nD=0;J\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
+    "lt" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M-D\nD=M\n@~\nD;JLT\n@*\nD=0;JMP\n(~)\nD=-1\n@*\nD;JMP\n(*)\n" + d_push + "\n",
 
     "and" : "\n" + d_pop + "\n@SP\nM=M-1\nM=M&D\nD=M\n@SP\nM=M+1\n",
 
@@ -174,7 +175,7 @@ def restoreCallerPointer(mem_pointer):
 """
 
 
-goto_return_address = "\n@R14\nA=M\nD;J\n"
+goto_return_address = "\n@R14\nA=M\nD;JMP\n"
 
 """
 For our implementation, @* will be the placeholder for the label name, @~ will be the
@@ -194,4 +195,18 @@ flowControlTable = {
     "call" : push_return_address + saveCallerPointer("LCL") + saveCallerPointer("ARG") + saveCallerPointer("THIS") + saveCallerPointer("THAT") + reposition_ARG + reposition_LCL + goto_func + place_return_label,
     "return" : get_endframe + get_return_address + reposition_return_val + reposition_caller_SP + restore_caller_THAT + restore_caller_THIS + restore_caller_ARG + restore_caller_LCL + goto_return_address
 
+}
+
+set_SP = "\n@261\nD=A\n@SP\nM=D\n"
+"""
+The following initializations might not be needed
+"""
+set_LCL = "\n@300\nD=A\n@LCL\nM=D\n"
+set_ARG = "\n@400\nD=A\n@ARG\nM=D\n"
+set_THIS = "\n@3000\nD=A\n@THIS\nM=D\n"
+set_THAT = "\n@3010\nD=A\n@THAT\nM=D\n"
+bootstrap = {
+
+    "sys.init" : set_SP,
+    "end" : "\n@sys.init$ret.0\n0;JMP\n"
 }
