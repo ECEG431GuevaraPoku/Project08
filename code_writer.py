@@ -3,7 +3,7 @@ from tables_patterns import *
 class CodeWriter:
 
     def __init__(self, filename):
-        self.fileString = filename.split(".")[0]
+        self.fileString = filename.split(".")[0].split("/")[-1]
         self.out_file = open(filename, 'a+')
         self.function_name = self.fileString + ".default"
 
@@ -17,6 +17,21 @@ class CodeWriter:
 
     def writeArithmetic(self, command):
         assembly_encoding = arithmeticSymbolTable[command]
+        if command == "eq":
+            eq_label = self.function_name + "$EQEQ"
+            push_label = self.function_name + "$PUSH2STACKEQ"
+            assembly_encoding = assembly_encoding.replace("~", eq_label)
+            assembly_encoding = assembly_encoding.replace("*", push_label)
+        elif command == "gt":
+            gt_label = self.function_name + "$GTGT"
+            push_label = self.function_name + "$PUSH2STACKGT"
+            assembly_encoding = assembly_encoding.replace("~", gt_label)
+            assembly_encoding = assembly_encoding.replace("*", push_label)
+        elif command == "lt":
+            lt_label = self.function_name + "$LT"
+            push_label = self.function_name + "$PUSH2STACKLT"
+            assembly_encoding = assembly_encoding.replace("~", lt_label)
+            assembly_encoding = assembly_encoding.replace("*", push_label)
         self.out_file.write(assembly_encoding)
 
     def writePushPop(self, command, segment, index, command_type):
@@ -63,7 +78,7 @@ class CodeWriter:
         label_name = self.function_name + "$" + label_name
         """
         label_name = self.createLabel(label, self.function_name)
-        label_name = "(" + label_name + ")"
+        label_name = "(" + label_name + ")\n"
         self.out_file.write(label_name)
 
     def writeGoto(self, label):
