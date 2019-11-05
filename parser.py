@@ -48,11 +48,26 @@ class Parser:
 		"""
 		Loop through the assembly file and convert each instruction to machine code
 		"""
+		#path = os.path.realpath(f.name)
+		# coder = CodeWriter(self.out_file_str)
+		# coder.write(bootstrap["sys.init"])
+		# coder.writeCall("sys.init", "0", 0)
 
 		with open(self.file_str, 'r') as in_file:
 
 			line_number = 1
 			syntax_error_line = 0
+
+			coder = CodeWriter(self.out_file_str)
+			coder.setFunctionName("sys.init")
+			commented_command = "//Set up SP and call sys.init\n"
+			coder.write(commented_command)
+			coder.write(bootstrap["sys.init"])
+			coder.writeCall("sys.init", "0", 0)
+			coder.write(bootstrap["end"])
+			#coder.write("End sys.init\n")
+			coder.setDefaultFunctionName()
+
 			for line in in_file:
 				syntax_error_line+=1
 				command = line.strip()	#remove white space
@@ -62,18 +77,18 @@ class Parser:
 					with open(self.out_file_str, 'a+') as out_file:
 						#Clear the contents of the hack file from previous assembles
 						out_file.truncate(0)
-					errorInfo = "\VM Syntax Error at line " + str(line_number)
+					errorInfo = "\nVM Syntax Error at line " + str(line_number)
 					print(errorInfo)
 					raise
 				else:
-					assembly_encoding = ""
-					coder = CodeWriter(self.out_file_str)
+
 
 					if command_type != COMMENT_OR_EMPTY:
 						commented_command = "//" + command + "\n"
 						coder.write(commented_command)
 						if command_type == C_ARITHMETIC:
                             #assembly_encoding = arithmeticSymbolTable[command]
+							command = re.search(c_arithmetic, command).group(0)
 							coder.writeArithmetic(command)
 						elif command_type == C_POP or command_type == C_PUSH:
 
@@ -106,6 +121,7 @@ class Parser:
 						elif command_type == C_CALL:
 							command_array = command.split()
 							function_name = command_array[1]
+							nArgs = command_array[2]
 							coder.writeCall(function_name, nArgs, line_number)
 
 						elif command_type == C_RETURN:
