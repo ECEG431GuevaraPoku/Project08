@@ -4,7 +4,9 @@ class CodeWriter:
 
     def __init__(self, filename):
         self.fileString = filename.split(".")[0].split("/")[-1]
-        self.out_file = open(filename, 'a+')
+        self.filename = filename
+        self.out_filename = filename + ".txt"
+        self.out_file = open(self.out_filename, 'a+')
         #self.function_name = self.fileString + default_function
 
     def setDefaultFunctionName(self):
@@ -114,6 +116,7 @@ class CodeWriter:
         loop_label_name = self.function_name + "$LOOP." + str(line_number)
 
         function_encoding = flowControlTable["function"]
+        function_encoding = function_encoding.replace("~", self.function_name)
         function_encoding = function_encoding.replace("*", loop_label_name)
         function_encoding = function_encoding.replace("_", nVars)
         self.out_file.write(function_encoding)
