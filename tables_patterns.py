@@ -123,7 +123,6 @@ pushMemSeg = {
     "pointer" : "\n@_\nD=M\n" + d_push + "\n"
 
 }
-
 """
 Variables and functions for function command
 """
@@ -190,7 +189,7 @@ flowControlTable = {
 
     #function: * in function will be replaced with "filename.function_nameLOOP"
     #Need to add unique identifier to the loop label if a function has more than one loop
-    "function" : saveKandZeroR14 + "\n(*)\n@R14\nA=M\nD=0\n" + d_push + "\n@R14\nM=M+1\n@R15\nM=M-1\n@*\nD;JNE\n",
+    "function" : "\n(~)\n" + saveKandZeroR14 + "\n(*)\n@R14\nA=M\nD=0\n" + d_push + "\n@R14\nM=M+1\n@R15\nM=M-1\nD=M\n@*\nD;JGT\n",
     #call: Appending the return label - (return_label) - is done in code_writer
     "call" : push_return_address + saveCallerPointer("LCL") + saveCallerPointer("ARG") + saveCallerPointer("THIS") + saveCallerPointer("THAT") + reposition_ARG + reposition_LCL + goto_func + place_return_label,
     "return" : get_endframe + get_return_address + reposition_return_val + reposition_caller_SP + restore_caller_THAT + restore_caller_THIS + restore_caller_ARG + restore_caller_LCL + goto_return_address
@@ -207,6 +206,6 @@ set_THIS = "\n@3000\nD=A\n@THIS\nM=D\n"
 set_THAT = "\n@3010\nD=A\n@THAT\nM=D\n"
 bootstrap = {
 
-    "sys.init" : set_SP,
-    "end" : "\n@sys.init$ret.0\n0;JMP\n"
+    "Sys.init" : set_SP,
+    "end" : "\n@Sys.init$ret.0\n0;JMP\n"
 }
