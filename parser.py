@@ -19,12 +19,13 @@ C_RETURN = "C_RETURN"
 class Parser:
 	hasMoreCommands = False
 
-	def __init__(self, file_str, out_file_str):
+	def __init__(self, file_str, coder):
 		self.file_str = file_str
 
 		fileArray = self.file_str.split('.', 1)
 		self.filename = fileArray[0]
 		self.fileType = fileArray[1]
+		self.coder = coder
 		"""
 		*Moved to main file*
 		try:
@@ -38,8 +39,8 @@ class Parser:
 
 		self.out_file_str = self.filename + ".hack"
 		"""
-		self.out_file_str = out_file_str + ".txt"
-		self.output = out_file_str + ".asm"
+		# self.out_file_str = out_file_str + ".txt"
+		# self.output = out_file_str + ".asm"
 		pushMemSeg["static"] = pushStatic(self.filename)
 		popMemSeg["static"] = popStatic(self.filename)
 		self.variable_address = 16
@@ -58,15 +59,15 @@ class Parser:
 			line_number = 1
 			syntax_error_line = 0
 
-			coder = CodeWriter(self.out_file_str)
-			coder.setFunctionName("sys.init")
-			commented_command = "//Set up SP and call sys.init\n"
-			coder.write(commented_command)
-			coder.write(bootstrap["sys.init"])
-			coder.writeCall("sys.init", "0", 0)
-			coder.write(bootstrap["end"])
-			#coder.write("End sys.init\n")
-			coder.setDefaultFunctionName()
+			# coder = CodeWriter(self.out_file_str)
+			# coder.setFunctionName("sys.init")
+			# commented_command = "//Set up SP and call sys.init\n"
+			# coder.write(commented_command)
+			# coder.write(bootstrap["sys.init"])
+			# coder.writeCall("sys.init", "0", 0)
+			# coder.write(bootstrap["end"])
+			# #coder.write("End sys.init\n")
+			# coder.setDefaultFunctionName()
 
 			for line in in_file:
 				syntax_error_line+=1
@@ -74,7 +75,7 @@ class Parser:
 				try:
 					command_type = self.commandType(command)
 				except VMSyntaxError as e:
-					with open(self.out_file_str, 'a+') as out_file:
+					with open(coder.out_file, 'a+') as out_file:
 						#Clear the contents of the hack file from previous assembles
 						out_file.truncate(0)
 					errorInfo = "\nVM Syntax Error at line " + str(line_number)
@@ -85,47 +86,47 @@ class Parser:
 
 					if command_type != COMMENT_OR_EMPTY:
 						commented_command = "//" + command + "\n"
-						coder.write(commented_command)
+						self.coder.write(commented_command)
 						if command_type == C_ARITHMETIC:
                             #assembly_encoding = arithmeticSymbolTable[command]
 							command = re.search(c_arithmetic, command).group(0)
-							coder.writeArithmetic(command)
+							self.coder.writeArithmetic(command)
 						elif command_type == C_POP or command_type == C_PUSH:
 
 							mem_seg = self.getMemorySegment(command)
 							index = self.getMemoryIndex(command)
-							coder.writePushPop(command, mem_seg, int(index), command_type)
+							self.coder.writePushPop(command, mem_seg, int(index), command_type)
 
 						elif command_type == C_LABEL:
 							command_array = command.split()
 							label_name = command_array[1]
-							coder.writeLabel(label_name)
+							self.coder.writeLabel(label_name)
 
 						elif command_type == C_GOTO:
 							command_array = command.split()
 							label_name = command_array[1]
-							coder.writeGoto(label_name)
+							self.coder.writeGoto(label_name)
 
 						elif command_type == C_IF:
 							command_array = command.split()
 							label_name = command_array[1]
-							coder.writeIf(label_name)
+							self.coder.writeIf(label_name)
 
 						elif command_type == C_FUNCTION:
 							command_array = command.split()
 							function_name = command_array[1]
 							nVars = command_array[2]
-							coder.setFunctionName(function_name)
-							coder.writeFunction(nVars, line_number)
+							self.coder.setFunctionName(function_name)
+							self.coder.writeFunction(nVars, line_number)
 
 						elif command_type == C_CALL:
 							command_array = command.split()
 							function_name = command_array[1]
 							nArgs = command_array[2]
-							coder.writeCall(function_name, nArgs, line_number)
+							self.coder.writeCall(function_name, nArgs, line_number)
 
 						elif command_type == C_RETURN:
-							coder.writeReturn()
+							self.coder.writeReturn()
 
 						else:
 							#Raise Syntax Error
@@ -137,12 +138,15 @@ class Parser:
 				finally:
 					coder.close()
 				"""
-			coder.close()
-			with open(self.out_file_str, 'r') as in_file, open(self.output, 'a+') as out_file:
-				for line in in_file:
-					if line.strip():
-						out_file.write(line)
-			os.remove(self.out_file_str)
+			file_name = self.coder.filename + ".asm"
+			in_file = open(self.coder.out_filename, "r")
+			out_file = open(file_name, "a+")
+			for line in in_file:
+				if line.strip():
+					out_file.write(line)
+			#out_file.flush()
+			in_file.close()
+			out_file.close()
 
 	def commandType(self, command):
 		if re.fullmatch(comment_pattern, command) != None or len(command)==0:
